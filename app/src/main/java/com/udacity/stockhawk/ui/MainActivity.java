@@ -1,6 +1,9 @@
 package com.udacity.stockhawk.ui;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.database.Cursor;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -13,6 +16,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.helper.ItemTouchHelper;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -24,6 +28,9 @@ import com.udacity.stockhawk.data.Contract;
 import com.udacity.stockhawk.data.PrefUtils;
 import com.udacity.stockhawk.sync.QuoteSyncJob;
 
+import java.text.DateFormat;
+import java.util.Date;
+
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import timber.log.Timber;
@@ -33,6 +40,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
         StockAdapter.StockAdapterOnClickHandler {
 
     private static final int STOCK_LOADER = 0;
+    static final String EXTRA_SYMBOL = "com.udacity.stockhawk.ui.MainActivity.StockSymbol";
     @SuppressWarnings("WeakerAccess")
     @BindView(R.id.recycler_view)
     RecyclerView stockRecyclerView;
@@ -42,11 +50,17 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
     @SuppressWarnings("WeakerAccess")
     @BindView(R.id.error)
     TextView error;
+    @BindView(R.id.last_update_view)
+    TextView lastUpdated;
     private StockAdapter adapter;
+
+    private BroadcastReceiver myReceiver;
 
     @Override
     public void onClick(String symbol) {
-        Timber.d("Symbol clicked: %s", symbol);
+        Intent detailIntent = new Intent(this, StockHistoryActivity.class);
+        detailIntent.putExtra(EXTRA_SYMBOL, symbol);
+        startActivity(detailIntent);
     }
 
     @Override
@@ -78,10 +92,50 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
                 String symbol = adapter.getSymbolAtPosition(viewHolder.getAdapterPosition());
                 PrefUtils.removeStock(MainActivity.this, symbol);
                 getContentResolver().delete(Contract.Quote.makeUriForStock(symbol), null, null);
+                Intent dataUpdatedIntent = new Intent(QuoteSyncJob.ACTION_DATA_UPDATED);
+                MainActivity.this.sendBroadcast(dataUpdatedIntent);
             }
         }).attachToRecyclerView(stockRecyclerView);
 
 
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (myReceiver != null) {
+            unregisterReceiver(myReceiver);
+            myReceiver = null;
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        myReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+                if (QuoteSyncJob.ACTION_STOCK_VALIDATION_FAILED.equals(action)) {
+                    String symbol = intent.getStringExtra(QuoteSyncJob.EXTRA_SYMBOL);
+                    java.util.Formatter f;
+                    String message =getString(R.string.stock_not_valid, symbol);
+                    Toast t = Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG);
+                    t.show();
+                } else if (QuoteSyncJob.ACTION_DATA_UPDATED.equals(action)) {
+                    DateFormat fmt = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
+                    Date now = new Date();
+                    String dateFmt = fmt.format(now);
+                    String message = getString(R.string.last_updated, dateFmt);
+                    MainActivity.this.lastUpdated.setText(message);
+                    Log.d(getClass().getSimpleName(), "DATA UPDATED");
+                }
+            }
+        };
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(QuoteSyncJob.ACTION_STOCK_VALIDATION_FAILED);
+        filter.addAction(QuoteSyncJob.ACTION_DATA_UPDATED);
+        registerReceiver(myReceiver, filter);
     }
 
     private boolean networkUp() {
@@ -127,6 +181,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
             }
 
             PrefUtils.addStock(this, symbol);
+            QuoteSyncJob.validateSymbol(this, symbol);
             QuoteSyncJob.syncImmediately(this);
         }
     }

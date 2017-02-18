@@ -12,7 +12,12 @@ public class QuoteJobService extends JobService {
     @Override
     public boolean onStartJob(JobParameters jobParameters) {
         Timber.d("Intent handled");
-        Intent nowIntent = new Intent(getApplicationContext(), QuoteIntentService.class);
+        String action = jobParameters.getExtras().getString(QuoteSyncJob.EXTRA_ACTION);
+        Intent nowIntent = new Intent(action, null, getApplicationContext(), QuoteIntentService.class);
+        if (QuoteSyncJob.ACTION_VALIDATE.equals(action)) {
+            String symbol = jobParameters.getExtras().getString(QuoteSyncJob.EXTRA_SYMBOL);
+            nowIntent.putExtra(QuoteSyncJob.EXTRA_SYMBOL, symbol);
+        }
         getApplicationContext().startService(nowIntent);
         return true;
     }

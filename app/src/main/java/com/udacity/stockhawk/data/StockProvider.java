@@ -9,6 +9,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.util.Log;
 
 
 public class StockProvider extends ContentProvider {
@@ -135,6 +136,7 @@ public class StockProvider extends ContentProvider {
                         '"' + symbol + '"' + " =" + Contract.Quote.COLUMN_SYMBOL,
                         selectionArgs
                 );
+                Log.d(StockProvider.class.getSimpleName(), "Rows deleted " + rowsDeleted);
                 break;
             default:
                 throw new UnsupportedOperationException("Unknown URI:" + uri);

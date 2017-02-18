@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.os.PersistableBundle;
 
 import com.udacity.stockhawk.data.Contract;
 import com.udacity.stockhawk.data.PrefUtils;
@@ -15,6 +16,7 @@ import com.udacity.stockhawk.data.PrefUtils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -31,13 +33,81 @@ import yahoofinance.quotes.stock.StockQuote;
 public final class QuoteSyncJob {
 
     private static final int ONE_OFF_ID = 2;
-    private static final String ACTION_DATA_UPDATED = "com.udacity.stockhawk.ACTION_DATA_UPDATED";
+    public static final String ACTION_REFRESH = "com.udacity.stockhawk.ACTION_REFRESH";
+    public static final String ACTION_VALIDATE = "com.udacity.stockhawk.ACTION_VALIDATE";
+    public static final String ACTION_DATA_UPDATED = "com.udacity.stockhawk.ACTION_DATA_UPDATED";
+    public static final String ACTION_STOCK_VALIDATED = "com.udacity.stockhawk.ACTION_STOCK_VALIDATED";
+    public static final String ACTION_STOCK_VALIDATION_FAILED = "com.udacity.stockhawk.ACTION_STOCK_VALIDATION_FAILED";
+    public static final String EXTRA_SYMBOL = "com.udacity.stockhawk.EXTRA_SYMBOL";
+    public static final String EXTRA_ACTION = "com.udacity.stockhawk.EXTRA_ACTION";
+
     private static final int PERIOD = 300000;
     private static final int INITIAL_BACKOFF = 10000;
     private static final int PERIODIC_ID = 1;
     private static final int YEARS_OF_HISTORY = 2;
 
     private QuoteSyncJob() {
+    }
+
+    static void validateStockQuote(Context context, String symbol) {
+        Timber.d("Running validation job");
+
+        if (symbol == null || symbol.length() == 0)
+            return;
+
+        Calendar from = Calendar.getInstance();
+        Calendar to = Calendar.getInstance();
+        from.add(Calendar.DATE, -7);
+
+        try {
+            String[] array = { symbol };
+
+            Map<String, Stock> quotes = YahooFinance.get(array);
+
+            Stock stock = quotes.get(symbol);
+            StockQuote quote = null;
+            if (stock != null && (quote = stock.getQuote()) != null && quote.getPrice() != null) {
+                float price = quote.getPrice().floatValue();
+                float change = quote.getChange().floatValue();
+                float percentChange = quote.getChangeInPercent().floatValue();
+                // insert the quote and history - will update the cursorloader
+                List<HistoricalQuote> history = stock.getHistory(from, to, Interval.WEEKLY);
+
+                StringBuilder historyBuilder = new StringBuilder();
+
+                for (HistoricalQuote it : history) {
+                    historyBuilder.append(it.getDate().getTimeInMillis());
+                    historyBuilder.append(", ");
+                    historyBuilder.append(it.getClose());
+                    historyBuilder.append("\n");
+                }
+
+                ContentValues quoteCV = new ContentValues();
+                quoteCV.put(Contract.Quote.COLUMN_SYMBOL, symbol);
+                quoteCV.put(Contract.Quote.COLUMN_PRICE, price);
+                quoteCV.put(Contract.Quote.COLUMN_PERCENTAGE_CHANGE, percentChange);
+                quoteCV.put(Contract.Quote.COLUMN_ABSOLUTE_CHANGE, change);
+                quoteCV.put(Contract.Quote.COLUMN_NAME, stock.getName());
+
+                quoteCV.put(Contract.Quote.COLUMN_HISTORY, historyBuilder.toString());
+
+                context.getContentResolver().insert(Contract.Quote.URI, quoteCV);
+
+                Intent intent = new Intent(ACTION_STOCK_VALIDATED);
+                intent.putExtra(EXTRA_SYMBOL, symbol);
+                context.sendBroadcast(intent);
+            } else {
+                PrefUtils.removeStock(context, symbol);
+                Intent intent = new Intent(ACTION_STOCK_VALIDATION_FAILED);
+                intent.putExtra(EXTRA_SYMBOL, symbol);
+                context.sendBroadcast(intent);
+            }
+
+        } catch (Exception e) {
+            Intent intent = new Intent(ACTION_STOCK_VALIDATION_FAILED);
+            intent.putExtra(EXTRA_SYMBOL, symbol);
+            context.sendBroadcast(intent);
+        }
     }
 
     static void getQuotes(Context context) {
@@ -73,36 +143,37 @@ public final class QuoteSyncJob {
 
 
                 Stock stock = quotes.get(symbol);
-                StockQuote quote = stock.getQuote();
+                StockQuote quote = null;
+                if (stock != null && (quote = stock.getQuote()) != null && quote.getPrice() != null) {
 
-                float price = quote.getPrice().floatValue();
-                float change = quote.getChange().floatValue();
-                float percentChange = quote.getChangeInPercent().floatValue();
+                    float price = quote.getPrice().floatValue();
+                    float change = quote.getChange().floatValue();
+                    float percentChange = quote.getChangeInPercent().floatValue();
 
-                // WARNING! Don't request historical data for a stock that doesn't exist!
-                // The request will hang forever X_x
-                List<HistoricalQuote> history = stock.getHistory(from, to, Interval.WEEKLY);
+                    // WARNING! Don't request historical data for a stock that doesn't exist!
+                    // The request will hang forever X_x
+                    List<HistoricalQuote> history = stock.getHistory(from, to, Interval.WEEKLY);
 
-                StringBuilder historyBuilder = new StringBuilder();
+                    StringBuilder historyBuilder = new StringBuilder();
 
-                for (HistoricalQuote it : history) {
-                    historyBuilder.append(it.getDate().getTimeInMillis());
-                    historyBuilder.append(", ");
-                    historyBuilder.append(it.getClose());
-                    historyBuilder.append("\n");
+                    for (HistoricalQuote it : history) {
+                        historyBuilder.append(it.getDate().getTimeInMillis());
+                        historyBuilder.append(", ");
+                        historyBuilder.append(it.getClose());
+                        historyBuilder.append("\n");
+                    }
+
+                    ContentValues quoteCV = new ContentValues();
+                    quoteCV.put(Contract.Quote.COLUMN_SYMBOL, symbol);
+                    quoteCV.put(Contract.Quote.COLUMN_PRICE, price);
+                    quoteCV.put(Contract.Quote.COLUMN_PERCENTAGE_CHANGE, percentChange);
+                    quoteCV.put(Contract.Quote.COLUMN_ABSOLUTE_CHANGE, change);
+                    quoteCV.put(Contract.Quote.COLUMN_NAME, stock.getName());
+
+                    quoteCV.put(Contract.Quote.COLUMN_HISTORY, historyBuilder.toString());
+
+                    quoteCVs.add(quoteCV);
                 }
-
-                ContentValues quoteCV = new ContentValues();
-                quoteCV.put(Contract.Quote.COLUMN_SYMBOL, symbol);
-                quoteCV.put(Contract.Quote.COLUMN_PRICE, price);
-                quoteCV.put(Contract.Quote.COLUMN_PERCENTAGE_CHANGE, percentChange);
-                quoteCV.put(Contract.Quote.COLUMN_ABSOLUTE_CHANGE, change);
-
-
-                quoteCV.put(Contract.Quote.COLUMN_HISTORY, historyBuilder.toString());
-
-                quoteCVs.add(quoteCV);
-
             }
 
             context.getContentResolver()
@@ -145,17 +216,16 @@ public final class QuoteSyncJob {
 
     public static synchronized void syncImmediately(Context context) {
 
-        ConnectivityManager cm =
-                (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        NetworkInfo networkInfo = cm.getActiveNetworkInfo();
-        if (networkInfo != null && networkInfo.isConnectedOrConnecting()) {
-            Intent nowIntent = new Intent(context, QuoteIntentService.class);
+        if (isNetworkUp(context)) {
+            Intent nowIntent = new Intent(ACTION_REFRESH, null, context, QuoteIntentService.class);
             context.startService(nowIntent);
         } else {
 
             JobInfo.Builder builder = new JobInfo.Builder(ONE_OFF_ID, new ComponentName(context, QuoteJobService.class));
+            PersistableBundle bundle = new PersistableBundle();
+            bundle.putString(EXTRA_ACTION, ACTION_REFRESH);
 
-
+            builder.setExtras(bundle);
             builder.setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                     .setBackoffCriteria(INITIAL_BACKOFF, JobInfo.BACKOFF_POLICY_EXPONENTIAL);
 
@@ -163,10 +233,35 @@ public final class QuoteSyncJob {
             JobScheduler scheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
 
             scheduler.schedule(builder.build());
-
-
         }
     }
 
+    public static synchronized void validateSymbol(Context context, String symbol) {
+        if (isNetworkUp(context)) {
+            Intent nowIntent = new Intent(ACTION_VALIDATE, null, context, QuoteIntentService.class);
+            nowIntent.putExtra(EXTRA_SYMBOL, symbol);
+            context.startService(nowIntent);
+        } else {
+            JobInfo.Builder builder = new JobInfo.Builder(ONE_OFF_ID, new ComponentName(context, QuoteJobService.class));
+            PersistableBundle bundle = new PersistableBundle();
+            bundle.putString(EXTRA_ACTION, ACTION_VALIDATE);
+            bundle.putString(EXTRA_SYMBOL, symbol);
 
+            builder.setExtras(bundle);
+            builder.setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                    .setBackoffCriteria(INITIAL_BACKOFF, JobInfo.BACKOFF_POLICY_EXPONENTIAL);
+
+
+            JobScheduler scheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+
+            scheduler.schedule(builder.build());
+        }
+    }
+
+    static boolean isNetworkUp(Context context) {
+        ConnectivityManager cm =
+                (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo networkInfo = cm.getActiveNetworkInfo();
+        return networkInfo != null && networkInfo.isConnectedOrConnecting();
+    }
 }
