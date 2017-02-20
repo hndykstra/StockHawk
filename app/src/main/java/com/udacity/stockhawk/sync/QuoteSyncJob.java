@@ -3,6 +3,7 @@ package com.udacity.stockhawk.sync;
 import android.app.job.JobInfo;
 import android.app.job.JobScheduler;
 import android.content.ComponentName;
+import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
@@ -176,10 +177,14 @@ public final class QuoteSyncJob {
                 }
             }
 
-            context.getContentResolver()
-                    .bulkInsert(
+            long updatedTime = System.currentTimeMillis();
+            ContentValues updateValues = new ContentValues();
+            updateValues.put(Contract.StockUpdated.COLUMN_LAST_UPDATED, updatedTime);
+            ContentResolver resolver = context.getContentResolver();
+            resolver.bulkInsert(
                             Contract.Quote.URI,
                             quoteCVs.toArray(new ContentValues[quoteCVs.size()]));
+            resolver.insert(Contract.StockUpdated.URI, updateValues);
 
             Intent dataUpdatedIntent = new Intent(ACTION_DATA_UPDATED);
             context.sendBroadcast(dataUpdatedIntent);

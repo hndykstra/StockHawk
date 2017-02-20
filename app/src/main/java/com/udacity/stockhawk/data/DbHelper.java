@@ -11,7 +11,7 @@ class DbHelper extends SQLiteOpenHelper {
 
 
     private static final String NAME = "StockHawk.db";
-    private static final int VERSION = 2;
+    private static final int VERSION = 3;
 
 
     DbHelper(Context context) {
@@ -32,12 +32,19 @@ class DbHelper extends SQLiteOpenHelper {
 
         db.execSQL(builder);
 
+        String updBuilder = "CREATE TABLE " + Contract.StockUpdated.TABLE_NAME + " ("
+                + Contract.StockUpdated._ID + " INTEGER PRIMARY KEY AUTOINCREMENT, "
+                + Contract.StockUpdated.COLUMN_LAST_UPDATED + " INTEGER NOT NULL"
+                + ");";
+        db.execSQL(updBuilder);
+
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
 
         db.execSQL(" DROP TABLE IF EXISTS " + Quote.TABLE_NAME);
+        db.execSQL(" DROP TABLE IF EXISTS " + Contract.StockUpdated.TABLE_NAME);
 
         onCreate(db);
     }

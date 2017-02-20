@@ -10,6 +10,7 @@ public final class Contract {
 
     static final String AUTHORITY = "com.udacity.stockhawk";
     static final String PATH_QUOTE = "quote";
+    static final String PATH_UPDATED = "updated";
     static final String PATH_QUOTE_WITH_SYMBOL = "quote/*";
     private static final Uri BASE_URI = Uri.parse("content://" + AUTHORITY);
 
@@ -53,6 +54,17 @@ public final class Contract {
         }
 
 
+    }
+
+    public static final class StockUpdated implements BaseColumns {
+        public static final Uri URI = BASE_URI.buildUpon().appendPath(PATH_UPDATED).build();
+        public static final String COLUMN_LAST_UPDATED = "lastUpdated";
+
+        public static final ImmutableList<String> UPDATED_COLUMNS = ImmutableList.of(
+                _ID,
+                COLUMN_LAST_UPDATED
+        );
+        public static final String TABLE_NAME = "stockUpdated";
     }
 
 }

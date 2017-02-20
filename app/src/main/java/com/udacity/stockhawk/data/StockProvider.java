@@ -16,6 +16,7 @@ public class StockProvider extends ContentProvider {
 
     private static final int QUOTE = 100;
     private static final int QUOTE_FOR_SYMBOL = 101;
+    private static final int UPDATED = 200;
 
     private static final UriMatcher uriMatcher = buildUriMatcher();
 
@@ -25,6 +26,7 @@ public class StockProvider extends ContentProvider {
         UriMatcher matcher = new UriMatcher(UriMatcher.NO_MATCH);
         matcher.addURI(Contract.AUTHORITY, Contract.PATH_QUOTE, QUOTE);
         matcher.addURI(Contract.AUTHORITY, Contract.PATH_QUOTE_WITH_SYMBOL, QUOTE_FOR_SYMBOL);
+        matcher.addURI(Contract.AUTHORITY, Contract.PATH_UPDATED, UPDATED);
         return matcher;
     }
 
@@ -66,6 +68,16 @@ public class StockProvider extends ContentProvider {
                 );
 
                 break;
+            case UPDATED:
+                returnCursor = db.query(Contract.StockUpdated.TABLE_NAME,
+                        projection,
+                        selection,
+                        selectionArgs,
+                        null,
+                        null,
+                        sortOrder
+                );
+                break;
             default:
                 throw new UnsupportedOperationException("Unknown URI:" + uri);
         }
@@ -98,6 +110,12 @@ public class StockProvider extends ContentProvider {
                         values
                 );
                 returnUri = Contract.Quote.URI;
+                break;
+            case UPDATED:
+                // updated always deletes any existing before insert
+                db.delete(Contract.StockUpdated.TABLE_NAME, null, null);
+                db.insert(Contract.StockUpdated.TABLE_NAME, null, values);
+                returnUri = Contract.StockUpdated.URI;
                 break;
             default:
                 throw new UnsupportedOperationException("Unknown URI:" + uri);
@@ -137,6 +155,10 @@ public class StockProvider extends ContentProvider {
                         selectionArgs
                 );
                 Log.d(StockProvider.class.getSimpleName(), "Rows deleted " + rowsDeleted);
+                break;
+            case UPDATED:
+                rowsDeleted = db.delete(Contract.StockUpdated.TABLE_NAME,
+                        selection, selectionArgs);
                 break;
             default:
                 throw new UnsupportedOperationException("Unknown URI:" + uri);

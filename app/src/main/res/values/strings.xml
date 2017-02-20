@@ -33,6 +33,7 @@
     <string name="error_no_stocks">No stocks added! Hit the floating action button to add one.</string>
     <string name="stock_not_valid">The stock symbol \'%s\' is not valid.</string>
     <string name="last_updated">Last Updated: %s</string>
+    <string name="last_updated_unknown">Last Updated: (Unknown)</string>
 
     <string name="empty_widget">No stocks selected.</string>
 

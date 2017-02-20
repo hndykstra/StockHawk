@@ -40,6 +40,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
         StockAdapter.StockAdapterOnClickHandler {
 
     private static final int STOCK_LOADER = 0;
+    private static final int UPDATE_LOADER = 1;
     static final String EXTRA_SYMBOL = "com.udacity.stockhawk.ui.MainActivity.StockSymbol";
     @SuppressWarnings("WeakerAccess")
     @BindView(R.id.recycler_view)
@@ -80,6 +81,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
 
         QuoteSyncJob.initialize(this);
         getSupportLoaderManager().initLoader(STOCK_LOADER, null, this);
+        getSupportLoaderManager().initLoader(UPDATE_LOADER, null, this);
 
         new ItemTouchHelper(new ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.RIGHT) {
             @Override
@@ -123,11 +125,7 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
                     Toast t = Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG);
                     t.show();
                 } else if (QuoteSyncJob.ACTION_DATA_UPDATED.equals(action)) {
-                    DateFormat fmt = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
-                    Date now = new Date();
-                    String dateFmt = fmt.format(now);
-                    String message = getString(R.string.last_updated, dateFmt);
-                    MainActivity.this.lastUpdated.setText(message);
+                    getSupportLoaderManager().initLoader(UPDATE_LOADER, null, MainActivity.this);
                     Log.d(getClass().getSimpleName(), "DATA UPDATED");
                 }
             }
@@ -188,20 +186,42 @@ public class MainActivity extends AppCompatActivity implements LoaderManager.Loa
 
     @Override
     public Loader<Cursor> onCreateLoader(int id, Bundle args) {
-        return new CursorLoader(this,
-                Contract.Quote.URI,
-                Contract.Quote.QUOTE_COLUMNS.toArray(new String[]{}),
-                null, null, Contract.Quote.COLUMN_SYMBOL);
+        if (id == STOCK_LOADER) {
+            return new CursorLoader(this,
+                    Contract.Quote.URI,
+                    Contract.Quote.QUOTE_COLUMNS.toArray(new String[]{}),
+                    null, null, Contract.Quote.COLUMN_SYMBOL);
+        } else if (id == UPDATE_LOADER) {
+            return new CursorLoader(this, Contract.StockUpdated.URI,
+                    Contract.StockUpdated.UPDATED_COLUMNS.toArray(new String[]{}),
+                    null, null, null);
+        } else {
+            return null;
+        }
     }
 
     @Override
     public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
-        swipeRefreshLayout.setRefreshing(false);
+        if (loader.getId() == STOCK_LOADER) {
+            swipeRefreshLayout.setRefreshing(false);
 
-        if (data.getCount() != 0) {
-            error.setVisibility(View.GONE);
+            if (data.getCount() != 0) {
+                error.setVisibility(View.GONE);
+            }
+            adapter.setCursor(data);
+        } else if (loader.getId() == UPDATE_LOADER) {
+            if (data.getCount() > 0) {
+                data.moveToFirst();
+                DateFormat fmt = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
+                Date upd = new Date(data.getLong(data.getColumnIndex(Contract.StockUpdated.COLUMN_LAST_UPDATED)));
+                String dateFmt = fmt.format(upd);
+                String message = getString(R.string.last_updated, dateFmt);
+                MainActivity.this.lastUpdated.setText(message);
+            } else {
+                String message = getString(R.string.last_updated_unknown);
+                MainActivity.this.lastUpdated.setText(message);
+            }
         }
-        adapter.setCursor(data);
     }
 
 

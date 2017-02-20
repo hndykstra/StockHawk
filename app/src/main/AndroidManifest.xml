@@ -47,7 +47,7 @@
         <receiver
             android:name=".widget.StockHawkWidget"
             android:label="@string/title_widget"
-            android:enabled="@bool/widget_enabled" >
+            android:enabled="@bool/widget_enabled">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="com.udacity.stockhawk.ACTION_DATA_UPDATED" />

@@ -13,6 +13,8 @@ public class QuoteJobService extends JobService {
     public boolean onStartJob(JobParameters jobParameters) {
         Timber.d("Intent handled");
         String action = jobParameters.getExtras().getString(QuoteSyncJob.EXTRA_ACTION);
+        if (action == null)
+            action = QuoteSyncJob.ACTION_REFRESH;
         Intent nowIntent = new Intent(action, null, getApplicationContext(), QuoteIntentService.class);
         if (QuoteSyncJob.ACTION_VALIDATE.equals(action)) {
             String symbol = jobParameters.getExtras().getString(QuoteSyncJob.EXTRA_SYMBOL);
